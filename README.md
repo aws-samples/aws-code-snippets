@@ -1,2 +1,5 @@
-# aws-code-snippets
-A collection of useful code snippets for interacting with Amazon Web Services
+AWS Code Snippets
+
+## License
+
+This library is licensed under the Apache 2.0 License. 
