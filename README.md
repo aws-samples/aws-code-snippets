@@ -2,4 +2,4 @@ AWS Code Snippets
 
 ## License
 
-This library is licensed under the Apache 2.0 License. 
+This repository contains multiple directories, each individually licensed. Please see the LICENSE file in each directory. 
