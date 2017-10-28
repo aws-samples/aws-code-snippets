@@ -1,3 +1,13 @@
+############################################################################
+## SCOPE.txt - version 1.0                                                ##
+## Created by Luke Youngblood - lukey@amazon.com                          ##
+## ---------------------------------------------------------------------- ##
+## Version history:                                                       ##
+## ---------------------------------------------------------------------- ##
+## v1.0 - 9/21/17 - Initial scope document                                ##
+############################################################################
+
+# Objective
 
 The goal of this repository is to provide a useful collection of code
 samples or "snippets" that can be modified slightly to perform a single
