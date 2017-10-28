@@ -1,0 +1,35 @@
+
+The goal of this repository is to provide a useful collection of code
+samples or "snippets" that can be modified slightly to perform a single
+discrete function or purpose.  If you've ever written source code using
+documentation as a reference, you know how difficult it can be sometimes
+to convert documentation, such as the boto3 reference, into functional
+code.  This repository aims to increase agility by shortening the gap
+between a conceptual application idea and a prototype or proof of concept,
+by providing code "snippets" that can be used as a starter for any
+application, to enable rapid prototyping and increase agility.
+
+This repository should contain:
+
+-	Code samples that are designed to demonstrate how to perform a single,
+	discrete function. An example would be: adding an item to a DynamoDB
+	table.
+-	CloudFormation template samples that are designed to provision a single,
+	discrete resource in AWS, or multiple resources that perform a single
+	discrete function. An example would be: An Elastic MapReduce cluster
+	that uses Spot Fleets.
+-	IAM template samples that are designed to configure identity or
+	resource-based permissions.
+-	Useful shell scripts and other "one-liners" designed to help manage
+	AWS resources.
+-	Skeleton code that is useful as a starter to build a microservice.
+
+This repository does not contain:
+
+-	Code that comprises a complete application.
+-	Code samples that, combined together, create a complete application.
+-	Code that does not meet a high quality standard.  The goal is to ensure
+	that all code snippets follow best practices, and are of sufficient
+	quality that they should not require significant modification or
+	refactoring for production use.
+-	Code that requires the use of deprecated APIs, services, or features.
