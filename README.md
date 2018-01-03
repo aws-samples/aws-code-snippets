@@ -12,6 +12,7 @@ This is a collection of code snippets that I've found useful while building appl
 * [RDS - Relational Database Service](Python/RDS.md)
 * [S3 - Simple Storage Service](Python/S3.md)
 * [SQS - Simple Queue Service](Python/SQS.md)
+* [Helper Functions](Python/HelperFunctions.md)
 
 ### JavaScript
 * [Rekognition](JavaScript/Rekognition.md)
