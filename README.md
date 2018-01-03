@@ -13,6 +13,9 @@ This is a collection of code snippets that I've found useful while building appl
 * [S3 - Simple Storage Service](Python/S3.md)
 * [SQS - Simple Queue Service](Python/SQS.md)
 
+### JavaScript
+* [Rekognition](JavaScript/Rekognition.md)
+
 ### CloudFormation
 * [ECS - Elastic Container Service](CloudFormation/ECS.md)
 
@@ -25,8 +28,8 @@ This is a collection of code snippets that I've found useful while building appl
 
 ### SQL
 * [Hive DDL](SQL/Hive.md)
-* [Redshift](SQL/Redshift.md)
 * [Oracle](SQL/Oracle.md)
+* [Redshift](SQL/Redshift.md)
 
 ### Quicksight
 * [Calculated Fields](Quicksight/CalculatedFields.md)
