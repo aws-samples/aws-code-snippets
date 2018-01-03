@@ -8,22 +8,28 @@ This is a collection of code snippets that I've found useful while building appl
 * [Athena](Python/Athena.md)
 * [CodeBuild](Python/CodeBuild.md)
 * [DynamoDB](Python/DynamoDB.md)
-* [RDS](Python/RDS.md)
-* [S3](Python/S3.md)
-* [SQS](Python/SQS.md)
+* [GuardDuty](Python/GuardDuty.md)
+* [RDS - Relational Database Service](Python/RDS.md)
+* [S3 - Simple Storage Service](Python/S3.md)
+* [SQS - Simple Queue Service](Python/SQS.md)
+
+### CloudFormation
+* [ECS - Elastic Container Service](CloudFormation/ECS.md)
 
 ### Bash
-* [EC2](Bash/EC2.md)
-* [SQS](Bash/SQS.md)
+* [EC2 - Elastic Compute Cloud](Bash/EC2.md)
+* [SQS - Simple Queue Service](Bash/SQS.md)
 
 ### Perl
-* [RDS](Perl/RDS.md)
+* [RDS - Relational Database Service](Perl/RDS.md)
 
-### Hive and Athena
-* [Hive DDL](Hive/Hive.md)
+### SQL
+* [Hive DDL](SQL/Hive.md)
+* [Redshift](SQL/Redshift.md)
+* [Oracle](SQL/Oracle.md)
 
 ### Quicksight
 * [Calculated Fields](Quicksight/CalculatedFields.md)
 
 ### IAM Policies
-* [S3](IAM/S3.md)
+* [S3 Simple Storage Service](IAM/S3.md)
