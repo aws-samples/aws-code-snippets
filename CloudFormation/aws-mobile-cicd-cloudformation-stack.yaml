@@ -1,0 +1,568 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Mobile App CICD Demo
+
+Parameters:
+
+  DeviceFarmProjectName:
+    Type: String
+    Default: demo-app-devicefarm
+  SourceBranchName:
+    Type: String
+    Default: master
+  CodeCommitRepoName:
+    Type: String
+    Default: demo-app-code-repo
+  CodeCommitRepoDescription:
+    Type: String
+    Default: demo-app-code-repo
+  BuildTimeoutInMinutes:
+    Type: Number
+    Default: 15
+  AppModuleName:
+    Type: String
+    Default: app
+  OutputApkKeyName:
+    Type: String
+    Default: app.apk
+
+Resources:
+
+  # AWS CodeCommit Git repository to store the app's code
+  CodeRepo:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryDescription: !Ref CodeCommitRepoDescription
+      RepositoryName: !Ref CodeCommitRepoName
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: LambdaPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action: "devicefarm:*"
+            Resource: "*"
+            Effect: Allow
+          - Action: "logs:*"
+            Resource: "*"
+            Effect: Allow
+          - Action: "codepipeline:PutJob*"
+            Resource: "*"
+            Effect: Allow
+
+  DeviceFarmProjectFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: "Creates, updates, deletes Device Farm projects"
+      Handler: "index.handler"
+      Runtime: "python3.6"
+      Role: !GetAtt ["LambdaRole", "Arn"]
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import sys
+          import traceback
+
+          def handle_delete(df, event):
+            arn = event['PhysicalResourceId']
+            df.delete_project(
+              arn = arn
+            )
+            return arn
+          
+          def handle_update(df, event):
+            arn = event['PhysicalResourceId']
+            df.update_project(
+              arn = arn,
+              name = event['ResourceProperties']['ProjectName']
+            )
+            return arn
+          
+          def handle_create(df, event):
+            resp = df.create_project(
+              name = event['ResourceProperties']['ProjectName']
+            )
+            return resp['project']['arn']
+          
+          def get_top_device_pool(df, df_project_arn):
+            try:
+              resp = df.list_device_pools(
+                arn=df_project_arn,
+                type='CURATED'
+              )
+
+              pools = resp['devicePools']
+              for pool in pools:
+                if pool['name'] == 'Top Devices':
+                  return pool['arn']
+            except:
+              print("Unable to get device pools: ", sys.exc_info()[0])
+            
+            return None
+
+          def handler(event, context):
+
+            df = boto3.client('devicefarm', region_name='us-west-2')
+            project_arn = None
+
+            try:
+              if event['RequestType'] == 'Delete':
+                project_arn = handle_delete(df, event)
+              
+              if event['RequestType'] == 'Update':
+                project_arn = handle_update(df, event)
+              
+              if event['RequestType'] == 'Create':
+                project_arn = handle_create(df, event)
+              
+              device_pool_arn = get_top_device_pool(df, project_arn)
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {'Arn' : project_arn, 'DevicePoolArn': device_pool_arn}, project_arn)
+
+            except:
+              print("Unexpected error:", sys.exc_info()[0])
+              traceback.print_exc()
+              cfnresponse.send(event, context, cfnresponse.FAILED, None, None)
+            
+
+  DeviceFarmProject:
+    Type: Custom::DeviceFarmProject
+    Properties:
+      ServiceToken: !GetAtt DeviceFarmProjectFunction.Arn
+      ProjectName: !Ref DeviceFarmProjectName
+
+  # Pipeline bucket
+  PipelineBucket:
+    Type: AWS::S3::Bucket
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service:
+            - codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: CodePipelinePolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Sid: CloudWatchLogsPolicy
+            Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+            - "*"
+          - Sid: CodeCommitPolicy
+            Effect: Allow
+            Action:
+            - codecommit:GitPull
+            Resource:
+            - Fn::GetAtt:
+              - CodeRepo
+              - Arn
+          - Sid: S3Policy
+            Effect: Allow
+            Action:
+            - s3:Get*
+            - s3:Put*
+            Resource:
+            - "*"
+          - Action:
+            - ecr:GetAuthorizationToken
+            Resource: "*"
+            Effect: Allow
+  
+  Builder:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/android-java-8:24.4.1
+        Type: LINUX_CONTAINER
+      ServiceRole:
+        Fn::GetAtt:
+        - CodeBuildServiceRole
+        - Arn
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: !Sub |
+          version: 0.1
+          phases:
+            pre_build:
+              commands:
+                - android-accept-licenses.sh "android update sdk --no-ui --all --filter \"android-$ANDROID_VERSION,tools,platform-tools,build-tools-$ANDROID_TOOLS_VERSION,extra-android-m2repository\""
+                - echo "y" | $ANDROID_HOME/tools/bin/sdkmanager "extras;m2repository;com;android;support;constraint;constraint-layout;1.0.2"
+            build:
+              commands:
+                - ./gradlew build
+          artifacts:
+            files:
+              - ${AppModuleName}/build/outputs/apk/${AppModuleName}-debug.apk
+            discard-paths: yes
+      Artifacts:
+        Type: CODEPIPELINE
+      TimeoutInMinutes:
+        Ref: BuildTimeoutInMinutes
+
+  Deliver:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/android-java-8:24.4.1
+        Type: LINUX_CONTAINER
+      ServiceRole:
+        Fn::GetAtt:
+        - CodeBuildServiceRole
+        - Arn
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: !Sub |
+          version: 0.1
+          phases:
+            build:
+              commands:
+                - aws s3 cp --acl public-read ${AppModuleName}-debug.apk s3://${ArtifactBucket}/${OutputApkKeyName}
+          artifacts:
+            files:
+              - ${AppModuleName}-debug.apk
+      Artifacts:
+        Type: CODEPIPELINE
+      TimeoutInMinutes:
+        Ref: BuildTimeoutInMinutes
+
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service:
+            - codepipeline.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: CodePipelinePolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:GetBucketVersioning
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - s3:PutObject
+            Resource:
+            - arn:aws:s3:::codepipeline*
+            - arn:aws:s3:::elasticbeanstalk*
+            Effect: Allow
+          - Action:
+            - codecommit:GetBranch
+            - codecommit:GetCommit
+            - codecommit:UploadArchive
+            - codecommit:GetUploadArchiveStatus
+            - codecommit:CancelUploadArchive
+            Resource:
+              Fn::GetAtt:
+              - CodeRepo
+              - Arn
+            Effect: Allow
+          - Action:
+            - codebuild:*
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - autoscaling:*
+            - cloudwatch:*
+            - s3:*
+            - sns:*
+            - cloudformation:*
+            - sqs:*
+            - iam:PassRole
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - lambda:InvokeFunction
+            - lambda:ListFunctions
+            Resource: "*"
+            Effect: Allow
+  
+  CloudFormationServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service:
+            - cloudformation.amazonaws.com
+          Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: CloudFormationPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action: "*"
+            Resource: "*"
+            Effect: Allow
+  
+  StartDeviceFarmTestFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.6
+      Timeout: 300
+      Environment:
+        Variables:
+          PROJECT_ARN: !GetAtt DeviceFarmProject.Arn
+          DEVICE_POOL_ARN: !GetAtt DeviceFarmProject.DevicePoolArn
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          import http.client
+          import os
+          import urllib.parse
+          import time
+          import tempfile
+          import zipfile
+
+          # Init codepipeline client
+          session = boto3.session.Session(
+            region_name='${AWS::Region}'
+          )
+          codepipeline = session.client('codepipeline')
+
+          # Init devicefarm client
+          df_session = boto3.session.Session(region_name='us-west-2')
+          devicefarm = df_session.client('devicefarm')
+
+          def check_devicefarm_test_status(job_id, job_data):
+            run_id = job_data['continuationToken']
+            resp = devicefarm.get_run(arn=run_id)
+
+            if resp['run']['result'] == 'PASSED':
+              codepipeline.put_job_success_result(jobId=job_id)
+            elif resp['run']['result'] == 'PENDING':
+              codepipeline.put_job_success_result(jobId=job_id, continuationToken=run_id)
+            else:
+              codepipeline.put_job_failure_result(jobId=job_id, failureDetails={'message': 'Failed', 'type': 'JobFailed'})
+          
+          def start_test(job_id, job_data):
+            # Get temp directory path
+            tmp_dir = tempfile.mkdtemp()
+
+            # Get input artifact
+            input_zipfile = tmp_dir + "/input.zip"
+            input_s3_credentials = job_data['artifactCredentials']
+            input_s3_location = job_data['inputArtifacts'][0]['location']['s3Location']
+
+            session = boto3.session.Session(
+              region_name='${AWS::Region}',
+              aws_access_key_id=input_s3_credentials['accessKeyId'],
+              aws_secret_access_key=input_s3_credentials['secretAccessKey'],
+              aws_session_token=input_s3_credentials['sessionToken']
+            )
+
+            s3 = session.client('s3')
+            obj = s3.get_object(
+              Bucket=input_s3_location['bucketName'],
+              Key=input_s3_location['objectKey']
+            )
+
+            input_bytes = obj['Body'].read()
+            f = open(input_zipfile, 'wb')
+            f.write(input_bytes)
+            f.close()
+
+            # Since the input artifact is an APK inside a Zip file, we need to first extract the Zip file
+            zip = zipfile.ZipFile(input_zipfile, 'r')
+            zip.extractall(tmp_dir)
+            zip.close()
+
+            # Read APK bytes
+            apk_file = tmp_dir + "/${AppModuleName}-debug.apk"
+            f = open(apk_file, 'rb')
+            apk_bytes = f.read()
+            f.close()
+
+            # Create upload in DeviceFarm
+            resp = devicefarm.create_upload(
+              projectArn=os.environ['PROJECT_ARN'],
+              name="app.apk",
+              type='ANDROID_APP',
+              contentType='application/octet-stream'
+            )
+
+            upload_url = resp['upload']['url']
+            upload_arn = resp['upload']['arn']
+
+            # Set HTTP request headers
+            headers = {
+              "Content-type": "application/octet-stream",
+              "Content-length": len(apk_bytes)
+            }
+
+            parsed_url = urllib.parse.urlparse(upload_url)
+            http_conn = http.client.HTTPSConnection(parsed_url.netloc, 443)
+            http_conn.request("PUT", upload_url, apk_bytes, headers)
+            http_resp = http_conn.getresponse()
+
+            # Wait for upload to be processed
+            while True:
+              resp = devicefarm.get_upload(arn=upload_arn)
+
+              if(resp['upload']['status'] == "SUCCEEDED"):
+                break
+              if(resp['upload']['status'] == "FAILED"):
+                break
+              time.sleep(5)
+            
+            # Schedule run
+            resp = devicefarm.schedule_run(
+              projectArn=os.environ['PROJECT_ARN'],
+              appArn=upload_arn,
+              devicePoolArn=os.environ['DEVICE_POOL_ARN'],
+              name=job_id,
+              test={
+                "type" : "BUILTIN_EXPLORER"
+              }
+            )
+            run_id = resp['run']['arn']
+
+            codepipeline = boto3.client('codepipeline')
+            codepipeline.put_job_success_result(jobId=job_id, continuationToken=run_id)
+
+          def handler(event, context):
+            try:
+              job_id = event['CodePipeline.job']['id']
+              job_data = event['CodePipeline.job']['data']
+
+              if 'continuationToken' in job_data:
+                check_devicefarm_test_status(job_id, job_data)
+              else:
+                start_test(job_id, job_data)
+            
+            except Exception as e:
+              traceback.print_exc()
+              codepipeline.put_job_failure_result(jobId=job_id, failureDetails={'message': 'Failed', 'type': 'JobFailed'})
+
+            return True
+
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Type: S3
+        Location: !Ref PipelineBucket
+      RestartExecutionOnUpdate: 'true'
+      RoleArn:
+        Fn::GetAtt:
+        - CodePipelineServiceRole
+        - Arn
+      Stages:
+      - Name: Source
+        Actions:
+        - Name: SourceAction
+          ActionTypeId:
+            Category: Source
+            Owner: AWS
+            Version: '1'
+            Provider: CodeCommit
+          OutputArtifacts:
+          - Name: SourceBundle
+          Configuration:
+            BranchName:
+              Ref: SourceBranchName
+            RepositoryName:
+              Ref: CodeCommitRepoName
+          RunOrder: '1'
+      - Name: Build
+        Actions:
+        - Name: CodeBuild
+          InputArtifacts:
+          - Name: SourceBundle
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          OutputArtifacts:
+          - Name: buildArtifact
+          Configuration:
+            ProjectName: !Ref Builder
+          RunOrder: '1'
+      - Name: Test
+        Actions:
+        - Name: RunDeviceFarmTest
+          InputArtifacts:
+          - Name: buildArtifact
+          ActionTypeId:
+            Category: Invoke
+            Owner: AWS
+            Version: '1'
+            Provider: Lambda
+          OutputArtifacts:
+          - Name: testRunId
+          Configuration:
+            FunctionName: !Ref StartDeviceFarmTestFunction
+          RunOrder: 1
+      - Name: Deliver
+        Actions:
+        - Name: CopyApkToS3
+          InputArtifacts:
+          - Name: buildArtifact
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          Configuration:
+            ProjectName: !Ref Deliver
+          RunOrder: '1'
+
+          
+Outputs:
+  CodeRepoCloneUrlHttp:
+    Description: "Code Repo HTTP Clone URL"
+    Value: !GetAtt CodeRepo.CloneUrlHttp
+  OutputApkUrl:
+    Description: "URL to the latest built and tested APK"
+    Value: !Sub 'https://${ArtifactBucket.DualStackDomainName}/${OutputApkKeyName}'
