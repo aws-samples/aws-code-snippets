@@ -225,7 +225,7 @@ Resources:
                 - ./gradlew build
           artifacts:
             files:
-              - ${AppModuleName}/build/outputs/apk/${AppModuleName}-debug.apk
+              - ${AppModuleName}/build/outputs/apk/debug/${AppModuleName}-debug.apk
             discard-paths: yes
       Artifacts:
         Type: CODEPIPELINE
