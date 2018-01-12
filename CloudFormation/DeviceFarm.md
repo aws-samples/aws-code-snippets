@@ -1,3 +1,8 @@
+## A CloudFormation template that will build a CI/CD pipeline for testing a mobile app with Device Farm
+
+This CloudFormation template was contributed by Adrian Hall, adrianha@amazon.com
+
+```yaml
 ---
 AWSTemplateFormatVersion: '2010-09-09'
 
@@ -566,3 +571,5 @@ Outputs:
   OutputApkUrl:
     Description: "URL to the latest built and tested APK"
     Value: !Sub 'https://${ArtifactBucket.DualStackDomainName}/${OutputApkKeyName}'
+
+```
