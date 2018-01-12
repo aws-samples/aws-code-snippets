@@ -18,6 +18,7 @@ This is a collection of code snippets that I've found useful while building appl
 * [Rekognition](JavaScript/Rekognition.md)
 
 ### CloudFormation
+* [CodePipeline](CloudFormation/CodePipeline.md)
 * [Device Farm](CloudFormation/DeviceFarm.md)
 * [ECS - Elastic Container Service](CloudFormation/ECS.md)
 
