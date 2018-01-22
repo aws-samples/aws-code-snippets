@@ -19,6 +19,7 @@ This is a collection of code snippets that I've found useful while building appl
 
 ### CloudFormation
 * [CodePipeline](CloudFormation/CodePipeline.md)
+* [Custom Resources](CloudFormation/CustomResources.md)
 * [Device Farm](CloudFormation/DeviceFarm.md)
 * [ECS - Elastic Container Service](CloudFormation/ECS.md)
 
